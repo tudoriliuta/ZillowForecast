@@ -6,72 +6,76 @@ library(rworldmap)
 library(rworldxtra)
 
 # load and prepare data
-prop <- fread("properties_2016.csv")
-trn <- read.csv("train_2016_v2.csv")
+properties <- fread("properties_2016.csv")
+training.set <- read.csv("train_2016_v2.csv")
 
-prop$censustractandblock <- factor(prop$censustractandblock)
-prop$longitude <- prop$longitude/1000000
-prop$latitude <- prop$latitude/1000000
-fulltrn <- merge(x = trn, y = prop, by = "parcelid", all.x = TRUE)
+# Prepare Data
+training.set[is.na(training.set)] <- 0
+properties[is.na(properties)] <- 0
+
+properties$censustractandblock <- factor(properties$censustractandblock)
+properties$longitude <- properties$longitude/1000000
+properties$latitude <- properties$latitude/1000000
+training.set.merged <- merge(x = training.set, y = properties, by = "parcelid", all.x = TRUE)
 
 # top features using gain ration
-top.weights <- gain.ratio(logerror~., fulltrn)
-print(top.weights)
-gain.subset <- cutoff.k(top.weights, 5)
-print(gain.subset)
+gain.ratio.feature.weights <- gain.ratio(logerror~., training.set.merged)
+print(gain.ratio.feature.weights)
+gain.ratio.top.features <- cutoff.k(gain.ratio.feature.weights, 10)
+print(gain.ratio.top.features)
 
 # top features using information gain
-top.weights <- information.gain(logerror~., fulltrn)
-print(top.weights)
-info.subset <- cutoff.k(top.weights, 5)
-print(info.subset)
+information.gain.feature.weights <- information.gain(logerror~., training.set.merged)
+print(information.gain.feature.weights)
+information.gain.top.features <- cutoff.k(information.gain.feature.weights, 10)
+print(information.gain.top.features)
 
 # map
 newmap <- getMap(resolution = "high")
 plot(newmap, 
-     xlim = c(min(prop$longitude, na.rm = TRUE), max(prop$longitude, na.rm = TRUE)), 
-     ylim = c(min(prop$latitude, na.rm = TRUE), max(prop$latitude, na.rm = TRUE)), 
+     xlim = c(min(properties$longitude, na.rm = TRUE), max(properties$longitude, na.rm = TRUE)), 
+     ylim = c(min(properties$latitude, na.rm = TRUE), max(properties$latitude, na.rm = TRUE)), 
      asp = 1)
-points(prop$longitude, prop$latitude, col = "red", cex = .1)
+points(properties$longitude, properties$latitude, col = "red", cex = .1)
 
 # time features
-date.info <- unclass(as.POSIXlt(fulltrn$transactiondate))
+date.info <- unclass(as.POSIXlt(training.set.merged$transactiondate))
 ls(date.info)
-date.feature.names <- c("mday", "mon", "year", "wday", "yday")
-fulltrn[feature.names] <- date.info[feature.names]
+date.feature.names <- c("mday", "mon", "year", "yday")
+training.set.merged[feature.names] <- date.info[feature.names]
 
 # all features
-full.subset <- subset(fulltrn, select = unique(c(gain.subset, info.subset, date.feature.names, "logerror")))
-prop.less <- subset(prop, select = c(gain.subset, info.subset))
-res <- subset(prop, select= "parcelid")
+training.set <- subset(training.set.merged, select = unique(c(gain.ratio.top.features, information.gain.top.features, date.feature.names, "logerror")))
+test.set <- subset(properties, select = c(gain.ratio.top.features, information.gain.top.features))
+results <- subset(properties, select= "parcelid")
 
 # Predict
-prop.less$mday <- 1
-prop.less$mon <- 9
-prop.less$year <- 116
-linear.model <- lm(logerror ~ ., data = full.subset)
-pred.w.plim <- predict(linear.model, prop.less, interval = "prediction")
-res$first <- pred.w.plim[,"fit"]
+test.set$mday <- 1
+test.set$mon <- 9
+test.set$year <- 116
+linear.model <- lm(logerror ~ ., data = training.set)
+pred.w.plim <- predict(linear.model, test.set, interval = "prediction")
+results$first <- pred.w.plim[,"fit"]
 
-prop.less$mon <- 10
-pred.w.plim <- predict(linear.model, prop.less, interval = "prediction")
-res$second <- pred.w.plim[,"fit"]
+test.set$mon <- 10
+pred.w.plim <- predict(linear.model, test.set, interval = "prediction")
+results$second <- pred.w.plim[,"fit"]
 
-prop.less$mon <- 11
-pred.w.plim <- predict(linear.model, prop.less, interval = "prediction")
-res$third <- pred.w.plim[,"fit"]
+test.set$mon <- 11
+pred.w.plim <- predict(linear.model, test.set, interval = "prediction")
+results$third <- pred.w.plim[,"fit"]
 
-prop.less$year <- 117
-pred.w.plim <- predict(linear.model, prop.less, interval = "prediction")
-res$sixth <- pred.w.plim[,"fit"]
+test.set$year <- 117
+pred.w.plim <- predict(linear.model, test.set, interval = "prediction")
+results$sixth <- pred.w.plim[,"fit"]
 
-prop.less$mon <- 10
-pred.w.plim <- predict(linear.model, prop.less, interval = "prediction")
-res$fifth <- pred.w.plim[,"fit"]
+test.set$mon <- 10
+pred.w.plim <- predict(linear.model, test.set, interval = "prediction")
+results$fifth <- pred.w.plim[,"fit"]
 
-prop.less$mon <- 9
-pred.w.plim <- predict(linear.model, prop.less, interval = "prediction")
-res$fourth <- pred.w.plim[,"fit"]
+test.set$mon <- 9
+pred.w.plim <- predict(linear.model, test.set, interval = "prediction")
+results$fourth <- pred.w.plim[,"fit"]
 
-# Save res
-write.csv(res, "zillow.predictions.csv", na="0", row.names = FALSE)
+# Save results
+write.csv(results, "zillow.predictions.csv", na="0", row.names = FALSE)
