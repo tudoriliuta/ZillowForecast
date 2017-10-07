@@ -1,21 +1,30 @@
 # setup
-setwd("Zillow House Prices/")
+setwd("zillow-forecast/")
 library(data.table)
 library(FSelector)
 library(rworldmap)
 library(rworldxtra)
 
-# load and prepare data
-properties <- fread("properties_2016.csv")
-training.set <- read.csv("train_2016_v2.csv")
+# load data
+properties <- fread("data/properties_2016.csv")
+training.set <- read.csv("data/train_2016_v2.csv")
+
+# map
+properties$longitude <- properties$longitude/1000000
+properties$latitude <- properties$latitude/1000000
+
+newmap <- getMap(resolution = "high")
+plot(newmap, 
+     xlim = c(min(properties$longitude, na.rm = TRUE), max(properties$longitude, na.rm = TRUE)), 
+     ylim = c(min(properties$latitude, na.rm = TRUE), max(properties$latitude, na.rm = TRUE)), 
+     asp = 1)
+points(properties$longitude, properties$latitude, col = "red", cex = .1)
 
 # Prepare Data
 training.set[is.na(training.set)] <- 0
 properties[is.na(properties)] <- 0
 
 properties$censustractandblock <- factor(properties$censustractandblock)
-properties$longitude <- properties$longitude/1000000
-properties$latitude <- properties$latitude/1000000
 training.set.merged <- merge(x = training.set, y = properties, by = "parcelid", all.x = TRUE)
 
 # top features using gain ration
@@ -30,19 +39,11 @@ print(information.gain.feature.weights)
 information.gain.top.features <- cutoff.k(information.gain.feature.weights, 10)
 print(information.gain.top.features)
 
-# map
-newmap <- getMap(resolution = "high")
-plot(newmap, 
-     xlim = c(min(properties$longitude, na.rm = TRUE), max(properties$longitude, na.rm = TRUE)), 
-     ylim = c(min(properties$latitude, na.rm = TRUE), max(properties$latitude, na.rm = TRUE)), 
-     asp = 1)
-points(properties$longitude, properties$latitude, col = "red", cex = .1)
-
 # time features
 date.info <- unclass(as.POSIXlt(training.set.merged$transactiondate))
 ls(date.info)
 date.feature.names <- c("mday", "mon", "year", "yday")
-training.set.merged[feature.names] <- date.info[feature.names]
+training.set.merged[date.feature.names] <- date.info[date.feature.names]
 
 # all features
 training.set <- subset(training.set.merged, select = unique(c(gain.ratio.top.features, information.gain.top.features, date.feature.names, "logerror")))
@@ -53,29 +54,35 @@ results <- subset(properties, select= "parcelid")
 test.set$mday <- 1
 test.set$mon <- 9
 test.set$year <- 116
+test.set$yday <- 274
 linear.model <- lm(logerror ~ ., data = training.set)
-pred.w.plim <- predict(linear.model, test.set, interval = "prediction")
-results$first <- pred.w.plim[,"fit"]
+pred.w.plim <- predict(linear.model, test.set)
+results$first <- pred.w.plim
 
 test.set$mon <- 10
-pred.w.plim <- predict(linear.model, test.set, interval = "prediction")
-results$second <- pred.w.plim[,"fit"]
+test.set$yday <- 305
+pred.w.plim <- predict(linear.model, test.set)
+results$second <- pred.w.plim
 
 test.set$mon <- 11
-pred.w.plim <- predict(linear.model, test.set, interval = "prediction")
-results$third <- pred.w.plim[,"fit"]
+test.set$yday <- 335
+pred.w.plim <- predict(linear.model, test.set)
+results$third <- pred.w.plim
 
 test.set$year <- 117
-pred.w.plim <- predict(linear.model, test.set, interval = "prediction")
-results$sixth <- pred.w.plim[,"fit"]
+pred.w.plim <- predict(linear.model, test.set)
+results$sixth <- pred.w.plim
 
 test.set$mon <- 10
-pred.w.plim <- predict(linear.model, test.set, interval = "prediction")
-results$fifth <- pred.w.plim[,"fit"]
+test.set$yday <- 305
+pred.w.plim <- predict(linear.model, test.set)
+results$fifth <- pred.w.plim
 
 test.set$mon <- 9
-pred.w.plim <- predict(linear.model, test.set, interval = "prediction")
-results$fourth <- pred.w.plim[,"fit"]
+test.set$yday <- 274
+pred.w.plim <- predict(linear.model, test.set)
+results$fourth <- pred.w.plim
 
 # Save results
-write.csv(results, "zillow.predictions.csv", na="0", row.names = FALSE)
+results <- results[, c(1,2,3,4,7,6,5)]
+write.csv(results, "data/predictions/zillow.predictions.csv", na="0", row.names = FALSE)
